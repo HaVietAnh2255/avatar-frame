@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>HUS Physics Club - Tạo Avatar Frame</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css"/>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -14,49 +13,52 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 20px 12px;
+      padding: 16px 10px;
       min-height: 100vh;
+      touch-action: none; /* Chống cuộn trang khi đang zoom trên điện thoại */
     }
-    h2 { margin-bottom: 6px; text-align: center; color: #38bdf8; font-size: 20px; font-weight: 700; }
-    p.guide { font-size: 13px; color: #94a3b8; margin-bottom: 16px; text-align: center; }
+    h2 { margin-bottom: 4px; text-align: center; color: #38bdf8; font-size: 19px; font-weight: 700; }
+    p.guide { font-size: 13px; color: #94a3b8; margin-bottom: 12px; text-align: center; }
     
-    /* Vùng chứa khung vuông cố định */
-    .editor-wrapper {
+    /* Vùng Canvas hiển thị */
+    .canvas-container {
       position: relative;
-      width: 320px;
-      height: 320px;
+      width: 330px;
+      height: 330px;
       background: #1c2541;
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.6);
     }
-    @media (min-width: 450px) {
-      .editor-wrapper { width: 360px; height: 360px; }
-    }
-
-    #cropper-target {
-      display: block;
-      max-width: 100%;
+    @media (min-width: 420px) {
+      .canvas-container { width: 360px; height: 360px; }
     }
 
-    /* Khung viền đè lên trên, chuột xuyên qua để chỉnh ảnh */
-    .frame-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
+    #mainCanvas {
       width: 100%;
       height: 100%;
-      pointer-events: none;
-      z-index: 10;
-      object-fit: fill;
+      cursor: grab;
+      display: block;
+    }
+    #mainCanvas:active {
+      cursor: grabbing;
     }
 
-    /* Tối ưu giao diện Cropper để người dùng nhìn rõ vùng tròn */
-    .cropper-view-box { outline: none !important; }
-    .cropper-modal { opacity: 0.2 !important; }
+    /* Thanh trượt zoom hỗ trợ người dùng điện thoại / chuột */
+    .zoom-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      max-width: 360px;
+      margin-top: 14px;
+      padding: 0 10px;
+    }
+    .zoom-bar span { font-size: 14px; color: #94a3b8; font-weight: 600; }
+    .zoom-bar input { flex: 1; accent-color: #38bdf8; cursor: pointer; }
 
     .controls {
-      margin-top: 16px;
+      margin-top: 14px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -68,7 +70,7 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 13px;
+      padding: 12px;
       border: none;
       border-radius: 8px;
       font-size: 15px;
@@ -87,97 +89,204 @@
 </head>
 <body>
 
-  <h2>TẠO AVATAR SỰ KIỆN</h2>
-  <p class="guide">Dùng ngón tay kéo hoặc phóng to/thu nhỏ ảnh để căn chỉnh</p>
+  <h2>TẠO AVATAR GEN ETA</h2>
+  <p class="guide">Kéo ảnh để di chuyển • Kẹp 2 ngón hoặc dùng thanh trượt để Zoom</p>
 
-  <div class="editor-wrapper">
-    <img id="cropper-target" src="" style="display: none;">
-    <img class="frame-overlay" id="frame-view" src="frame.png" alt="Frame">
+  <div class="canvas-container">
+    <canvas id="mainCanvas" width="1080" height="1080"></canvas>
+  </div>
+
+  <div class="zoom-bar" id="zoomContainer" style="display: none;">
+    <span>🔍 Thu</span>
+    <input type="range" id="zoomSlider" min="0.1" max="4" step="0.01" value="1">
+    <span>Phóng 🔎</span>
   </div>
 
   <div class="controls">
     <label class="btn btn-upload">
-      📁 Tải ảnh lên
+      📁 Tải ảnh của bạn lên
       <input type="file" id="imageInput" accept="image/*">
     </label>
 
     <button class="btn btn-download" id="downloadBtn" style="display: none;">
-      💾 Tải ảnh về máy
+      💾 Tải ảnh hoàn chỉnh về máy
     </button>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
   <script>
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
     const imageInput = document.getElementById('imageInput');
-    const cropperTarget = document.getElementById('cropper-target');
     const downloadBtn = document.getElementById('downloadBtn');
-    let cropper = null;
+    const zoomSlider = document.getElementById('zoomSlider');
+    const zoomContainer = document.getElementById('zoomContainer');
 
-    const OUTPUT_SIZE = 1080;
+    const SIZE = 1080;
+    let userImg = null;
+    let frameImg = new Image();
+    frameImg.crossOrigin = "anonymous";
+    frameImg.src = 'frame.png';
 
+    // Tọa độ và kích thước ảnh người dùng trên canvas
+    let state = {
+      x: 0,
+      y: 0,
+      scale: 1,
+      isDragging: false,
+      startX: 0,
+      startY: 0,
+      initialPinchDist: 0,
+      initialScale: 1
+    };
+
+    frameImg.onload = () => draw();
+
+    // Vẽ toàn bộ lên Canvas
+    function draw() {
+      ctx.clearRect(0, 0, SIZE, SIZE);
+
+      // 1. Nền màu xanh tối của CLB
+      ctx.fillStyle = '#002b49';
+      ctx.fillRect(0, 0, SIZE, SIZE);
+
+      // 2. Vẽ ảnh cá nhân ở lớp dưới
+      if (userImg) {
+        ctx.save();
+        ctx.translate(state.x, state.y);
+        ctx.scale(state.scale, state.scale);
+        // Căn tâm ảnh vào đúng vị trí translate
+        ctx.drawImage(userImg, -userImg.width / 2, -userImg.height / 2);
+        ctx.restore();
+      }
+
+      // 3. Vẽ Frame viền đè lên trên cùng
+      if (frameImg.complete) {
+        ctx.drawImage(frameImg, 0, 0, SIZE, SIZE);
+      }
+    }
+
+    // Tải ảnh lên
     imageInput.addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(event) {
-        cropperTarget.src = event.target.result;
-        cropperTarget.style.display = 'block';
+      reader.onload = function(evt) {
+        userImg = new Image();
+        userImg.onload = function() {
+          // Tính tỉ lệ fit ảnh vừa vặn hình tròn ban đầu
+          const baseScale = Math.max(SIZE / userImg.width, SIZE / userImg.height);
+          state.scale = baseScale * 0.8;
+          state.x = SIZE / 2;
+          state.y = SIZE / 2;
 
-        if (cropper) cropper.destroy();
+          zoomSlider.min = state.scale * 0.2;
+          zoomSlider.max = state.scale * 4;
+          zoomSlider.value = state.scale;
 
-        cropper = new Cropper(cropperTarget, {
-          aspectRatio: 1,
-          viewMode: 0,
-          dragMode: 'move',
-          autoCropArea: 1,
-          restore: false,
-          guides: false,
-          center: false,
-          highlight: false,
-          cropBoxMovable: false,
-          cropBoxResizable: false,
-          toggleDragModeOnDblclick: false,
-          ready: function () {
-            downloadBtn.style.display = 'inline-flex';
-          }
-        });
+          zoomContainer.style.display = 'flex';
+          downloadBtn.style.display = 'inline-flex';
+          draw();
+        };
+        userImg.src = evt.target.result;
       };
       reader.readAsDataURL(file);
     });
 
-    downloadBtn.addEventListener('click', function() {
-      if (!cropper) return;
+    // Cập nhật zoom qua thanh trượt
+    zoomSlider.addEventListener('input', function() {
+      state.scale = parseFloat(this.value);
+      draw();
+    });
 
-      // Lấy trực tiếp Canvas đã crop đúng chuẩn 1:1 tỉ lệ hiển thị
-      const userCanvas = cropper.getCroppedCanvas({
-        width: OUTPUT_SIZE,
-        height: OUTPUT_SIZE,
-        fillColor: '#002b49',
-        imageSmoothingEnabled: true,
-        imageSmoothingQuality: 'high'
-      });
-
-      const finalCanvas = document.createElement('canvas');
-      finalCanvas.width = OUTPUT_SIZE;
-      finalCanvas.height = OUTPUT_SIZE;
-      const ctx = finalCanvas.getContext('2d');
-
-      // 1. Vẽ ảnh người dùng đã căn chỉnh
-      ctx.drawImage(userCanvas, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-
-      // 2. Vẽ Frame đè lên
-      const frameImg = new Image();
-      frameImg.crossOrigin = "anonymous";
-      frameImg.src = 'frame.png';
-      frameImg.onload = function() {
-        ctx.drawImage(frameImg, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-
-        const link = document.createElement('a');
-        link.download = 'avatar-hus-physics.png';
-        link.href = finalCanvas.toDataURL('image/png');
-        link.click();
+    // --- XỬ LÝ KÉO & ZOOM (CHUỘT VÀ CẢM ỨNG) ---
+    function getCanvasCoords(clientX, clientY) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleFactor = SIZE / rect.width;
+      return {
+        x: (clientX - rect.left) * scaleFactor,
+        y: (clientY - rect.top) * scaleFactor
       };
+    }
+
+    // Chuột
+    canvas.addEventListener('mousedown', (e) => {
+      if (!userImg) return;
+      state.isDragging = true;
+      const pos = getCanvasCoords(e.clientX, e.clientY);
+      state.startX = pos.x - state.x;
+      state.startY = pos.y - state.y;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!state.isDragging) return;
+      const pos = getCanvasCoords(e.clientX, e.clientY);
+      state.x = pos.x - state.startX;
+      state.y = pos.y - state.startY;
+      draw();
+    });
+
+    window.addEventListener('mouseup', () => state.isDragging = false);
+
+    canvas.addEventListener('wheel', (e) => {
+      if (!userImg) return;
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.05 : 0.95;
+      state.scale *= zoomFactor;
+      zoomSlider.value = state.scale;
+      draw();
+    }, { passive: false });
+
+    // Cảm ứng điện thoại
+    function getDistance(touches) {
+      return Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY
+      );
+    }
+
+    canvas.addEventListener('touchstart', (e) => {
+      if (!userImg) return;
+      if (e.touches.length === 1) {
+        state.isDragging = true;
+        const pos = getCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+        state.startX = pos.x - state.x;
+        state.startY = pos.y - state.y;
+      } else if (e.touches.length === 2) {
+        state.isDragging = false;
+        state.initialPinchDist = getDistance(e.touches);
+        state.initialScale = state.scale;
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      if (!userImg) return;
+      e.preventDefault();
+
+      if (e.touches.length === 1 && state.isDragging) {
+        const pos = getCanvasCoords(e.touches[0].clientX, e.touches[0].clientY);
+        state.x = pos.x - state.startX;
+        state.y = pos.y - state.startY;
+        draw();
+      } else if (e.touches.length === 2) {
+        const dist = getDistance(e.touches);
+        const scaleChange = dist / state.initialPinchDist;
+        state.scale = state.initialScale * scaleChange;
+        zoomSlider.value = state.scale;
+        draw();
+      }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', () => state.isDragging = false);
+
+    // Tải ảnh hoàn chỉnh (Đúng 100% những gì đang thấy trên Canvas)
+    downloadBtn.addEventListener('click', function() {
+      if (!userImg) return;
+      draw(); // Đảm bảo vẽ frame nét nhất
+      const link = document.createElement('a');
+      link.download = 'avatar-hus-physics.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
     });
   </script>
 </body>
