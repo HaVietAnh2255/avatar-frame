@@ -9,7 +9,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #0f172a;
+      background: #0b132b;
       color: #f8fafc;
       display: flex;
       flex-direction: column;
@@ -20,11 +20,12 @@
     h2 { margin-bottom: 6px; text-align: center; color: #38bdf8; font-size: 20px; font-weight: 700; }
     p.guide { font-size: 13px; color: #94a3b8; margin-bottom: 16px; text-align: center; }
     
+    /* Vùng chứa khung vuông cố định */
     .editor-wrapper {
       position: relative;
       width: 320px;
       height: 320px;
-      background: #020617;
+      background: #1c2541;
       border-radius: 12px;
       overflow: hidden;
       box-shadow: 0 8px 24px rgba(0,0,0,0.5);
@@ -38,6 +39,7 @@
       max-width: 100%;
     }
 
+    /* Khung viền đè lên trên, chuột xuyên qua để chỉnh ảnh */
     .frame-overlay {
       position: absolute;
       top: 0;
@@ -49,8 +51,9 @@
       object-fit: fill;
     }
 
+    /* Tối ưu giao diện Cropper để người dùng nhìn rõ vùng tròn */
     .cropper-view-box { outline: none !important; }
-    .cropper-modal { opacity: 0.1 !important; }
+    .cropper-modal { opacity: 0.2 !important; }
 
     .controls {
       margin-top: 16px;
@@ -84,7 +87,7 @@
 </head>
 <body>
 
-  <h2>TẠO AVATAR GEN ETA HPC</h2>
+  <h2>TẠO AVATAR SỰ KIỆN</h2>
   <p class="guide">Dùng ngón tay kéo hoặc phóng to/thu nhỏ ảnh để căn chỉnh</p>
 
   <div class="editor-wrapper">
@@ -109,7 +112,6 @@
     const cropperTarget = document.getElementById('cropper-target');
     const downloadBtn = document.getElementById('downloadBtn');
     let cropper = null;
-    let rawUserImage = null;
 
     const OUTPUT_SIZE = 1080;
 
@@ -119,67 +121,60 @@
 
       const reader = new FileReader();
       reader.onload = function(event) {
-        rawUserImage = new Image();
-        rawUserImage.src = event.target.result;
-        rawUserImage.onload = function() {
-          cropperTarget.src = event.target.result;
-          cropperTarget.style.display = 'block';
+        cropperTarget.src = event.target.result;
+        cropperTarget.style.display = 'block';
 
-          if (cropper) cropper.destroy();
+        if (cropper) cropper.destroy();
 
-          cropper = new Cropper(cropperTarget, {
-            aspectRatio: 1,
-            viewMode: 0,
-            dragMode: 'move',
-            autoCropArea: 1,
-            restore: false,
-            guides: false,
-            center: false,
-            highlight: false,
-            cropBoxMovable: false,
-            cropBoxResizable: false,
-            toggleDragModeOnDblclick: false,
-            ready: function () {
-              downloadBtn.style.display = 'inline-flex';
-            }
-          });
-        };
+        cropper = new Cropper(cropperTarget, {
+          aspectRatio: 1,
+          viewMode: 0,
+          dragMode: 'move',
+          autoCropArea: 1,
+          restore: false,
+          guides: false,
+          center: false,
+          highlight: false,
+          cropBoxMovable: false,
+          cropBoxResizable: false,
+          toggleDragModeOnDblclick: false,
+          ready: function () {
+            downloadBtn.style.display = 'inline-flex';
+          }
+        });
       };
       reader.readAsDataURL(file);
     });
 
     downloadBtn.addEventListener('click', function() {
-      if (!cropper || !rawUserImage) return;
+      if (!cropper) return;
 
-      // Lấy tọa độ x, y, width, height thực tế chính xác trên ảnh gốc
-      const data = cropper.getData(true);
+      // Lấy trực tiếp Canvas đã crop đúng chuẩn 1:1 tỉ lệ hiển thị
+      const userCanvas = cropper.getCroppedCanvas({
+        width: OUTPUT_SIZE,
+        height: OUTPUT_SIZE,
+        fillColor: '#002b49',
+        imageSmoothingEnabled: true,
+        imageSmoothingQuality: 'high'
+      });
 
       const finalCanvas = document.createElement('canvas');
       finalCanvas.width = OUTPUT_SIZE;
       finalCanvas.height = OUTPUT_SIZE;
       const ctx = finalCanvas.getContext('2d');
 
-      // Nền màu xanh dự phòng
-      ctx.fillStyle = '#002b49';
-      ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+      // 1. Vẽ ảnh người dùng đã căn chỉnh
+      ctx.drawImage(userCanvas, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-      // Cắt trực tiếp từ ảnh gốc theo đúng tỷ lệ hiển thị
-      ctx.drawImage(
-        rawUserImage,
-        data.x, data.y, data.width, data.height,
-        0, 0, OUTPUT_SIZE, OUTPUT_SIZE
-      );
-
-      // Vẽ Frame đè lên trên
+      // 2. Vẽ Frame đè lên
       const frameImg = new Image();
       frameImg.crossOrigin = "anonymous";
       frameImg.src = 'frame.png';
       frameImg.onload = function() {
         ctx.drawImage(frameImg, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-        // Tải file trực tiếp về máy
         const link = document.createElement('a');
-        link.download = 'avatar-hpc.png';
+        link.download = 'avatar-hus-physics.png';
         link.href = finalCanvas.toDataURL('image/png');
         link.click();
       };
