@@ -14,24 +14,23 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 24px 12px;
+      padding: 20px 12px;
       min-height: 100vh;
     }
-    h2 { margin-bottom: 6px; text-align: center; color: #38bdf8; font-size: 20px; }
-    p.guide { font-size: 13px; color: #94a3b8; margin-bottom: 18px; text-align: center; }
+    h2 { margin-bottom: 6px; text-align: center; color: #38bdf8; font-size: 20px; font-weight: 700; }
+    p.guide { font-size: 13px; color: #94a3b8; margin-bottom: 16px; text-align: center; }
     
-    /* Vùng hiển thị khung chỉnh sửa */
     .editor-wrapper {
       position: relative;
-      width: 340px;
-      height: 340px;
-      background: #000;
-      border-radius: 16px;
+      width: 320px;
+      height: 320px;
+      background: #020617;
+      border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
     }
     @media (min-width: 450px) {
-      .editor-wrapper { width: 380px; height: 380px; }
+      .editor-wrapper { width: 360px; height: 360px; }
     }
 
     #cropper-target {
@@ -39,7 +38,6 @@
       max-width: 100%;
     }
 
-    /* Khung viền đè lên trên, chuột xuyên qua để chỉnh ảnh dưới */
     .frame-overlay {
       position: absolute;
       top: 0;
@@ -48,24 +46,19 @@
       height: 100%;
       pointer-events: none;
       z-index: 10;
-      object-fit: cover;
+      object-fit: fill;
     }
 
-    /* Ẩn các viền mờ mặc định của thư viện để nhìn rõ frame */
-    .cropper-view-box {
-      outline: none !important;
-    }
-    .cropper-modal {
-      opacity: 0.1 !important;
-    }
+    .cropper-view-box { outline: none !important; }
+    .cropper-modal { opacity: 0.1 !important; }
 
     .controls {
-      margin-top: 20px;
+      margin-top: 16px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
       width: 100%;
-      max-width: 380px;
+      max-width: 360px;
     }
 
     .btn {
@@ -74,26 +67,25 @@
       justify-content: center;
       padding: 13px;
       border: none;
-      border-radius: 10px;
+      border-radius: 8px;
       font-size: 15px;
       font-weight: 600;
       cursor: pointer;
       text-decoration: none;
-      transition: all 0.2s;
+      transition: 0.2s;
     }
 
     .btn-upload { background: #0284c7; color: #fff; }
-    .btn-upload:hover { background: #0369a1; }
     .btn-download { background: #10b981; color: #fff; }
-    .btn-download:hover { background: #059669; }
+    .btn:active { opacity: 0.85; }
 
     input[type="file"] { display: none; }
   </style>
 </head>
 <body>
 
-  <h2>TẠO AVATAR KHUNG SỰ KIỆN</h2>
-  <p class="guide">Dùng ngón tay/chuột kéo, xoay hoặc thu nhỏ ảnh cho vừa khít hình tròn</p>
+  <h2>TẠO AVATAR SỰ KIỆN</h2>
+  <p class="guide">Dùng ngón tay kéo hoặc phóng to/thu nhỏ ảnh để căn chỉnh</p>
 
   <div class="editor-wrapper">
     <img id="cropper-target" src="" style="display: none;">
@@ -102,12 +94,12 @@
 
   <div class="controls">
     <label class="btn btn-upload">
-      📁 Tải ảnh khác lên
+      📁 Tải ảnh lên
       <input type="file" id="imageInput" accept="image/*">
     </label>
 
     <button class="btn btn-download" id="downloadBtn" style="display: none;">
-      💾 Tải ảnh hoàn chỉnh (1080x1080)
+      💾 Tải ảnh về máy
     </button>
   </div>
 
@@ -117,6 +109,7 @@
     const cropperTarget = document.getElementById('cropper-target');
     const downloadBtn = document.getElementById('downloadBtn');
     let cropper = null;
+    let rawUserImage = null;
 
     const OUTPUT_SIZE = 1080;
 
@@ -126,60 +119,67 @@
 
       const reader = new FileReader();
       reader.onload = function(event) {
-        cropperTarget.src = event.target.result;
-        cropperTarget.style.display = 'block';
+        rawUserImage = new Image();
+        rawUserImage.src = event.target.result;
+        rawUserImage.onload = function() {
+          cropperTarget.src = event.target.result;
+          cropperTarget.style.display = 'block';
 
-        if (cropper) cropper.destroy();
+          if (cropper) cropper.destroy();
 
-        cropper = new Cropper(cropperTarget, {
-          aspectRatio: 1,
-          viewMode: 0, // Cho phép kéo và thu nhỏ tự do ra ngoài viền
-          dragMode: 'move',
-          autoCropArea: 1,
-          restore: false,
-          guides: false,
-          center: false,
-          highlight: false,
-          cropBoxMovable: false,
-          cropBoxResizable: false,
-          toggleDragModeOnDblclick: false,
-          ready: function () {
-            downloadBtn.style.display = 'inline-flex';
-          }
-        });
+          cropper = new Cropper(cropperTarget, {
+            aspectRatio: 1,
+            viewMode: 0,
+            dragMode: 'move',
+            autoCropArea: 1,
+            restore: false,
+            guides: false,
+            center: false,
+            highlight: false,
+            cropBoxMovable: false,
+            cropBoxResizable: false,
+            toggleDragModeOnDblclick: false,
+            ready: function () {
+              downloadBtn.style.display = 'inline-flex';
+            }
+          });
+        };
       };
       reader.readAsDataURL(file);
     });
 
     downloadBtn.addEventListener('click', function() {
-      if (!cropper) return;
+      if (!cropper || !rawUserImage) return;
 
-      // 1. Cắt chính xác khung vuông 1080x1080 (loại bỏ mọi phần lòi ra ngoài)
-      const croppedCanvas = cropper.getCroppedCanvas({
-        width: OUTPUT_SIZE,
-        height: OUTPUT_SIZE,
-        fillColor: '#002b49', // Nền phụ đề phòng ảnh nhỏ hơn khung
-        imageSmoothingQuality: 'high'
-      });
+      // Lấy tọa độ x, y, width, height thực tế chính xác trên ảnh gốc
+      const data = cropper.getData(true);
 
-      // 2. Tạo Canvas để đè Frame lên
       const finalCanvas = document.createElement('canvas');
       finalCanvas.width = OUTPUT_SIZE;
       finalCanvas.height = OUTPUT_SIZE;
       const ctx = finalCanvas.getContext('2d');
 
-      // Vẽ ảnh chân dung đã căn chỉnh
-      ctx.drawImage(croppedCanvas, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+      // Nền màu xanh dự phòng
+      ctx.fillStyle = '#002b49';
+      ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
-      // Vẽ Frame đè lên
+      // Cắt trực tiếp từ ảnh gốc theo đúng tỷ lệ hiển thị
+      ctx.drawImage(
+        rawUserImage,
+        data.x, data.y, data.width, data.height,
+        0, 0, OUTPUT_SIZE, OUTPUT_SIZE
+      );
+
+      // Vẽ Frame đè lên trên
       const frameImg = new Image();
       frameImg.crossOrigin = "anonymous";
       frameImg.src = 'frame.png';
       frameImg.onload = function() {
         ctx.drawImage(frameImg, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
 
+        // Tải file trực tiếp về máy
         const link = document.createElement('a');
-        link.download = 'avatar-hus-physics.png';
+        link.download = 'avatar-hpc.png';
         link.href = finalCanvas.toDataURL('image/png');
         link.click();
       };
